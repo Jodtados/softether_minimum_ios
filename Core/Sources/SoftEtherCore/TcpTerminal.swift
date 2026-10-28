@@ -19,7 +19,7 @@ public enum TcpTerminalError: Error {
 public final class TcpTerminal: @unchecked Sendable {
     private let bridge: SharedBridge
     private let connection: NWConnection
-    private let queue = DispatchQueue(label: "softether.tcp")
+    private static let queue = DispatchQueue(label: "softether.tcp")
 
     private let sendLock = NSLock()
     private var pendingSends: [(Data, CheckedContinuation<Void, Error>)] = []
@@ -43,7 +43,7 @@ public final class TcpTerminal: @unchecked Sendable {
         let port = NWEndpoint.Port(rawValue: UInt16(bridge.config.serverPort)) ?? 443
 
         let tlsOptions = NWProtocolTLS.Options()
-        customizeTLS(tlsOptions, config: bridge.config, bridge: bridge)
+        Self.customizeTLS(tlsOptions, config: bridge.config, bridge: bridge)
 
         let tcpOptions = NWProtocolTCP.Options()
         tcpOptions.noDelay = true
@@ -79,11 +79,11 @@ public final class TcpTerminal: @unchecked Sendable {
                     break
                 }
             }
-            connection.start(queue: queue)
+            connection.start(queue: Self.queue)
         }
     }
 
-    private func customizeTLS(_ options: NWProtocolTLS.Options, config: TunnelConfig, bridge: SharedBridge) {
+    private static func customizeTLS(_ options: NWProtocolTLS.Options, config: TunnelConfig, bridge: SharedBridge) {
         let secOptions = options.securityProtocolOptions
 
         if config.sslVersion == "TLSv1.3" {
@@ -123,7 +123,7 @@ public final class TcpTerminal: @unchecked Sendable {
             // hostname check against the configured host (not the endpoint)
             _ = hostname
             proceed(true)
-        }, queue)
+        }, Self.queue)
     }
 
     private static func pemBody(of pem: String) -> String {
