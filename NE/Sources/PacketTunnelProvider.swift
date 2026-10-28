@@ -13,7 +13,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     private var store: ServerStore?
     private var rotationStartedAt: Date?
 
-    override func startTunnel(options: [String: AnyObject], completionHandler: @escaping (Error?) -> Void) {
+    override func startTunnel(options: [String: NSObject]?, completionHandler: @escaping (Error?) -> Void) {
         let sharedDefaults = UserDefaults(suiteName: appGroupId)
         defaults = sharedDefaults
         store = sharedDefaults.map(ServerStore.init(defaults:))
@@ -29,11 +29,11 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         var config = store.tunnelConfig(for: profile)
 
         // app-supplied overrides (rotation restarts reuse the same mechanism)
-        if let hostname = options["hostname"] as? String { config.serverHostname = hostname }
-        if let hub = options["hub"] as? String { config.serverHubName = hub }
-        if let username = options["username"] as? String { config.clientUsername = username }
-        if let password = options["password"] as? String { config.clientPassword = password }
-        if let port = options["port"] as? Int { config.serverPort = port }
+        if let hostname = options?["hostname"] as? String { config.serverHostname = hostname }
+        if let hub = options?["hub"] as? String { config.serverHubName = hub }
+        if let username = options?["username"] as? String { config.clientUsername = username }
+        if let password = options?["password"] as? String { config.clientPassword = password }
+        if let port = options?["port"] as? Int { config.serverPort = port }
 
         let bridge = SharedBridge(config: config)
         bridge.clientOsVer = ProcessInfo.processInfo.operatingSystemVersionString
@@ -85,7 +85,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         controller.run()
     }
 
-    override func stopTunnel(reason: NEProviderStopReason, completionHandler: @escaping () -> Void) {
+    override func stopTunnel(with reason: NEProviderStopReason, completionHandler: @escaping () -> Void) {
         isStopping = true
         controller?.kill(nil)
         controller = nil
@@ -288,6 +288,6 @@ final class FlowTerminal: IpTerminal {
         guard size > ethernetHeaderSize, start + size <= src.count else { return }
 
         let ipPacket = Array(src[(start + ethernetHeaderSize) ..< (start + size)])
-        flow.writePackets([ipPacket])
+        flow.writePackets([Data(ipPacket)])
     }
 }
