@@ -134,7 +134,7 @@ public final class TcpTerminal: @unchecked Sendable {
 
     private static func pem(of certificate: SecCertificate) -> String? {
         var data: CFData?
-        guard SecItemExport(certificate, SecExternalFormat.formatPEM, [], nil, &data) == errSecSuccess,
+        guard SecItemExport(certificate, .formatX509Cert, .pemArmour, nil, &data) == errSecSuccess,
               let data else { return nil }
         return String(data: data as Data, encoding: .utf8)
     }
@@ -354,7 +354,6 @@ public final class TcpTerminal: @unchecked Sendable {
 
 extension IPv4Address {
     func rawV4Bytes() -> [UInt8] {
-        let v = rawValue // integer value, e.g. 1.2.3.4 -> 0x01020304
-        return [UInt8(v >> 24 & 0xFF), UInt8(v >> 16 & 0xFF), UInt8(v >> 8 & 0xFF), UInt8(v & 0xFF)]
+        [UInt8](rawValue) // 4 address bytes in network order
     }
 }

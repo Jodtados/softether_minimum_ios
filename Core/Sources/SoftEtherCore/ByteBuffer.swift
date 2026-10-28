@@ -5,7 +5,7 @@
 import Foundation
 
 public final class ByteBuffer {
-    public private(set) var bytes: [UInt8]
+    public internal(set) var bytes: [UInt8]
     public var position: Int
     public var limit: Int
 
