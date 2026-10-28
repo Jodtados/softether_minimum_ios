@@ -288,6 +288,6 @@ final class FlowTerminal: IpTerminal {
         guard size > ethernetHeaderSize, start + size <= src.count else { return }
 
         let ipPacket = Array(src[(start + ethernetHeaderSize) ..< (start + size)])
-        flow.writePackets([Data(ipPacket)])
+        flow.writePackets([Data(ipPacket)], withProtocols: [NSNumber(value: AF_INET)])
     }
 }
