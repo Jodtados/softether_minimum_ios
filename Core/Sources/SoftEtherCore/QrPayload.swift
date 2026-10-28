@@ -189,7 +189,7 @@ public enum QrPayload {
                 continue // Android throws; tolerant here as decode() guards the result
             }
 
-            value = (value << 5) | index.encodedOffset
+            value = (value << 5) | base32Alphabet.distance(from: base32Alphabet.startIndex, to: index)
             bits += 5
             if bits >= 8 {
                 bits -= 8

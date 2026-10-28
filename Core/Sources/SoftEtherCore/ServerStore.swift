@@ -308,14 +308,14 @@ public enum ServerLinkParser {
             guard let components = URLComponents(string: text) else { return nil }
             return components.queryItems?
                 .first { $0.name.lowercased() == name }?
-                .value?
-                .takeIf { !$0.isEmpty }
+                .value
+                .flatMap { $0.isEmpty ? nil : $0 }
         }
 
         var hub = query("hub") ?? query("hubname")
         if hub == nil {
             let path = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-            hub = path.split(separator: "/").first.map(String.init).takeIf { !$0.isEmpty }
+            hub = path.split(separator: "/").first.map(String.init).flatMap { $0.isEmpty ? nil : $0 }
         }
 
         let port: Int?
@@ -354,11 +354,5 @@ public enum ServerLinkParser {
         guard isDomain || isIPv4 else { return nil }
 
         return ParsedServer(hostname: text, port: nil, hub: nil, username: nil, password: nil)
-    }
-}
-
-extension Optional where Wrapped == String {
-    fileprivate func takeIf(_ predicate: (String) -> Bool) -> String? {
-        flatMap { predicate($0) ? $0 : nil }
     }
 }
