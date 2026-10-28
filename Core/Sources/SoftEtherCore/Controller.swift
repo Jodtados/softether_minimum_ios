@@ -287,9 +287,10 @@ public final class OutgoingManager: @unchecked Sendable {
     }
 
     private func sendOutgoingPacket(_ frameNum: Int, _ mainBuffer: ByteBuffer) async throws {
-        mainBuffer.bytes.withUnsafeMutableBytes { raw in
-            raw.storeBytes(of: UInt32(frameNum).bigEndian, as: UInt32.self, at: 0)
-        }
+        let position = mainBuffer.position
+        mainBuffer.position = 0
+        mainBuffer.putU32(UInt32(frameNum)) // into the 4 bytes reserved by move(4)
+        mainBuffer.position = position
         mainBuffer.flip()
         try await bridge.tcpTerminal!.sendStream(mainBuffer)
     }
