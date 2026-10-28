@@ -1,0 +1,87 @@
+name: softether
+options:
+  bundleIdPrefix: com.jodtados
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+
+packages:
+  SoftEtherCore:
+    path: Core
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    TARGETED_DEVICE_FAMILY: "1"
+    CODE_SIGN_STYLE: Manual
+
+targets:
+  softether:
+    type: application
+    platform: iOS
+    sources:
+      - App/Sources
+    dependencies:
+      - package: SoftEtherCore
+      - target: SoftEtherNE
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: SoftEther
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        NSCameraUsageDescription: Сканирование QR-кода для импорта сервера
+        ITSAppUsesNonExemptEncryption: false
+    entitlements:
+      path: App/softether.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.jodtados.softether
+        com.apple.developer.networking.networkextension:
+          - packet-tunnel-provider
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.jodtados.softether
+
+  SoftEtherNE:
+    type: app-extension
+    platform: iOS
+    sources:
+      - NE/Sources
+    dependencies:
+      - package: SoftEtherCore
+    info:
+      path: NE/Info.plist
+      properties:
+        CFBundleDisplayName: SoftEther NE
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.networkextension.packet-tunnel
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).PacketTunnelProvider
+    entitlements:
+      path: NE/SoftEtherNE.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.jodtados.softether
+        com.apple.developer.networking.networkextension:
+          - packet-tunnel-provider
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.jodtados.softether.ne
+        SKIP_INSTALL: YES
+
+schemes:
+  softether:
+    build:
+      targets:
+        softether: all
+    run:
+      config: Debug
+    archive:
+      config: Release

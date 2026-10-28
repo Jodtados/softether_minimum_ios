@@ -1,0 +1,51 @@
+name: iOS unsigned IPA
+
+on:
+  workflow_dispatch:
+    inputs:
+      user_build:
+        description: 'USER_BUILD — включить UI экспорта QR'
+        type: boolean
+        default: false
+  push:
+    tags: ['v*']
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install xcodegen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build (unsigned)
+        run: |
+          FLAGS=""
+          if [ "${{ inputs.user_build }}" = "true" ]; then
+            FLAGS="OTHER_SWIFT_FLAGS=-DUSER_BUILD"
+          fi
+          xcodebuild \
+            -project softether.xcodeproj \
+            -scheme softether \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY='' $FLAGS build
+
+      - name: Pack unsigned IPA
+        run: |
+          mkdir -p build/ipa/Payload
+          cp -R "build/Build/Products/Release-iphoneos/softether.app" build/ipa/Payload/
+          cd build/ipa && zip -qry ../SoftEther-unsigned.ipa Payload
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: SoftEther-unsigned
+          path: build/SoftEther-unsigned.ipa
+          if-no-files-found: error
