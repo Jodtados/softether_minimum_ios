@@ -26,7 +26,7 @@ public let prefStatusText = "STATUS_TEXT"
 public let prefUsedBytesSnapshot = "USED_BYTES_SNAPSHOT"
 public let prefServerSecret = "MVC_QR_SECRET"
 
-public struct ServerProfile: Equatable, Codable {
+public struct ServerProfile: Equatable, Codable, Identifiable {
     public var id: String
     public var label: String
     public var hostname: String
