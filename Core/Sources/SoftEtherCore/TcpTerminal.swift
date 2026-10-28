@@ -133,10 +133,18 @@ public final class TcpTerminal: @unchecked Sendable {
     }
 
     private static func pem(of certificate: SecCertificate) -> String? {
-        var data: CFData?
-        guard SecItemExport(certificate, .formatX509Cert, .pemArmour, nil, &data) == errSecSuccess,
-              let data else { return nil }
-        return String(data: data as Data, encoding: .utf8)
+        // SecItemExport is macOS-only; wrap the DER by hand (PEM = base64 at 64 chars)
+        let der = SecCertificateCopyData(certificate) as Data
+        var body = der.base64EncodedString()
+        var lines: [String] = []
+        while body.count > 64 {
+            lines.append(String(body.prefix(64)))
+            body.removeFirst(64)
+        }
+        lines.append(body)
+        return "-----BEGIN CERTIFICATE-----\n"
+            + lines.joined(separator: "\n")
+            + "\n-----END CERTIFICATE-----\n"
     }
 
     private func captureEndpoints() {
