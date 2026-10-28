@@ -187,7 +187,7 @@ extension Array where Element == UInt8 {
         return -1
     }
 
-    public func read(from other: [UInt8]) {
+    public mutating func read(from other: [UInt8]) {
         precondition(count <= other.count)
         replaceSubrange(0 ..< count, with: other[0 ..< count])
     }
@@ -217,6 +217,6 @@ extension Array where Element == UInt8 {
 extension FixedWidthInteger {
     /// Byte-order swap as in Int.reversed() of mvc (endianness inversion).
     public func reversedEndian() -> Self {
-        bitPattern.byteSwapped
+        byteSwapped
     }
 }

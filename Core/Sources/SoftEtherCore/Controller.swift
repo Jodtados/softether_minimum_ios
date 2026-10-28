@@ -157,7 +157,7 @@ public final class Controller: @unchecked Sendable {
             return true
         }
 
-        finish(received.result, received.from, received.supplement)
+        await finish(received.result, received.from, received.supplement)
         return false
     }
 
@@ -250,7 +250,7 @@ public final class OutgoingManager: @unchecked Sendable {
         let mainBuffer = ByteBuffer(capacity: max(16384, minCapacity * 4))
 
         while !Task.isCancelled {
-            guard let firstPacket = await retrieveChannel.receive() else { break }
+            let firstPacket = await retrieveChannel.receive()
 
             // send through the UDP hole if possible
             if let udpTerminal = bridge.udpTerminal,

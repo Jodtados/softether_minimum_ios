@@ -272,7 +272,7 @@ public final class SharedBridge: @unchecked Sendable {
 public enum Resolve {
     public static func ipv4(_ hostname: String) -> [UInt8]? {
         var hints = addrinfo()
-        hints.ai_family = sa_family_t(AF_INET)
+        hints.ai_family = AF_INET
         hints.ai_socktype = SOCK_STREAM
         var info: UnsafeMutablePointer<addrinfo>?
         guard getaddrinfo(hostname, nil, &hints, &info) == 0, let first = info else { return nil }
@@ -280,7 +280,7 @@ public enum Resolve {
 
         var out: [UInt8]?
         let current = info
-        if let sa = current?.pointee.ai_addr, current!.pointee.ai_family == sa_family_t(AF_INET) {
+        if let sa = current?.pointee.ai_addr, current!.pointee.ai_family == AF_INET {
             sa.withMemoryRebound(to: sockaddr_in.self, capacity: 1) {
                 let addr = $0.pointee.sin_addr
                 out = withUnsafeBytes(of: addr) { Array($0) }
