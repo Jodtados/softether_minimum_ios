@@ -288,7 +288,7 @@ public final class OutgoingManager: @unchecked Sendable {
 
     private func sendOutgoingPacket(_ frameNum: Int, _ mainBuffer: ByteBuffer) async throws {
         mainBuffer.bytes.withUnsafeMutableBytes { raw in
-            raw.storeBytes(of: frameNum.bigEndian, as: UInt32.self, at: 0)
+            raw.storeBytes(of: UInt32(frameNum).bigEndian, as: UInt32.self, at: 0)
         }
         mainBuffer.flip()
         try await bridge.tcpTerminal!.sendStream(mainBuffer)
