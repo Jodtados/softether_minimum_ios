@@ -131,7 +131,7 @@ final class QrPayloadTests: XCTestCase {
     func testWrongKeyIsRejected() {
         let otherKey = QrPayload.deriveKey("OTHERKEYOTHERKEYOTHERKEYOTHER7")
 
-        XCTAssertNil(QrPayload.decode(QrPayload.encode(profile, key: key), otherKey))
+        XCTAssertNil(QrPayload.decode(QrPayload.encode(profile, key: key), key: otherKey))
     }
 
     func testBatchRoundtrip() {

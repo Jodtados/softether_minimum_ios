@@ -35,7 +35,7 @@ final class UnitsTests: XCTestCase {
     }
 
     func testUDPDatagram() {
-        let zero = UDPDatagram().also {
+        let zero = also(UDPDatagram()) {
             $0.srcPort = UInt16(bitPattern: Int16(truncatingIfNeeded: -8))
             $0.dstPort = 0
             $0.payloadUnknown = []
@@ -43,7 +43,7 @@ final class UnitsTests: XCTestCase {
         }
         writeReadUDPDatagram(zero)
 
-        let oneByte = UDPDatagram().also {
+        let oneByte = also(UDPDatagram()) {
             $0.srcPort = UInt16(bitPattern: Int16(truncatingIfNeeded: -549_654_713))
             $0.dstPort = UInt16(bitPattern: Int16(truncatingIfNeeded: -1_991_713_114))
             $0.payloadUnknown = [0x9C]
@@ -51,7 +51,7 @@ final class UnitsTests: XCTestCase {
         }
         writeReadUDPDatagram(oneByte)
 
-        let big = UDPDatagram().also {
+        let big = also(UDPDatagram()) {
             $0.srcPort = 65214
             $0.dstPort = 33409
             $0.payloadUnknown = [UInt8].fromHexString(
@@ -67,7 +67,7 @@ final class UnitsTests: XCTestCase {
     // MARK: IPv4 packet round-trip
 
     func testIPPacket() {
-        let packet = IPv4Packet().also {
+        let packet = also(IPv4Packet()) {
             $0.srcAddress[3] = 0xEC // -20 in Java terms
             $0.payloadUnknown = []
         }
@@ -118,11 +118,11 @@ final class UnitsTests: XCTestCase {
         let myMac: [UInt8] = [0x5E, 11, 23, 58, 13, 21]
         let myIp: [UInt8] = [10, 0, 0, 5]
 
-        let frame = EthernetFrame().also {
+        let frame = also(EthernetFrame()) {
             $0.dstMac = myMac
             $0.srcMac = [0xAA, 1, 2, 3, 4, 5]
             $0.etherType = etherTypeIPv4
-            let packet = IPv4Packet().also {
+            let packet = also(IPv4Packet()) {
                 $0.srcAddress = [10, 0, 0, 1]
                 $0.dstAddress = myIp
                 $0.payloadUnknown = [1, 2, 3] // non-UDP: parsed as opaque payload
@@ -139,11 +139,9 @@ final class UnitsTests: XCTestCase {
     }
 }
 
-extension AnyObject {
-    func also(_ block: (Self) -> Void) -> Self {
-        block(self)
-        return self
-    }
+func also<T>(_ value: T, _ block: (T) -> Void) -> T {
+    block(value)
+    return value
 }
 
 // MARK: - PropertyPack round-trip (wire format symmetry)
