@@ -205,7 +205,7 @@ struct PhotoQrPicker: UIViewControllerRepresentable {
 
         static func detectQr(in image: UIImage) -> String? {
             guard let ciImage = CIImage(image: image) else { return nil }
-            let options = [CIDetectorAccuracy: CIDetectorAccuracyHigh, CIDetectorAspectRatio: 1.0]
+            let options: [String: Any] = [CIDetectorAccuracy: CIDetectorAccuracyHigh, CIDetectorAspectRatio: 1.0]
             guard let detector = CIDetector(ofType: CIDetectorTypeQRCode, context: nil, options: options)
             else { return nil }
 

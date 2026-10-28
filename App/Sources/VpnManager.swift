@@ -21,7 +21,7 @@ final class VpnManager {
         let managers = try await NETunnelProviderManager.loadAllFromPreferences()
 
         if let existing = managers.first(where: {
-            ($0.tunnelProviderProtocol?.providerBundleIdentifier ?? "") == providerBundleId
+            ($0.protocolConfiguration as? NETunnelProviderProtocol)?.providerBundleIdentifier == providerBundleId
         }) {
             manager = existing
             existing.isEnabled = true

@@ -64,95 +64,102 @@ struct ServerListView: View {
             || statusText.hasPrefix("Ротация") || statusText.hasPrefix("Лимит: переключение")
     }
 
-    var body: some View {
-        Group {
-            VStack(spacing: 0) {
-                List {
-                    Section {
-                        if servers.isEmpty {
-                            Text("Нет серверов. Добавьте через QR, ссылку или вручную.")
-                                .foregroundColor(.secondary)
+    private var serverList: some View {
+        List {
+            Section {
+                if servers.isEmpty {
+                    Text("Нет серверов. Добавьте через QR, ссылку или вручную.")
+                        .foregroundColor(.secondary)
+                }
+                ForEach(servers) { server in
+                    Button {
+                        if !isConnected {
+                            AppModel.store.setActiveServer(server.id, isUserInitiated: true)
+                            activeId = server.id
+                            VpnManager.shared.connect()
                         }
-                        ForEach(servers) { server in
-                            Button {
-                                if !isConnected {
-                                    AppModel.store.setActiveServer(server.id, isUserInitiated: true)
-                                    activeId = server.id
-                                    VpnManager.shared.connect()
-                                }
-                            } label: {
-                                HStack {
-                                    Image(systemName: server.id == activeId && isConnected
-                                        ? "checkmark.circle.fill" : "circle")
-                                        .foregroundColor(server.id == activeId ? .accentColor : .secondary)
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(server.label.isEmpty ? server.hostname : server.label)
-                                            .foregroundColor(.primary)
-                                        Text("\(server.hostname):\(String(server.port)) · \(server.hub)")
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                    }
-                                    Spacer()
-                                }
+                    } label: {
+                        HStack {
+                            Image(systemName: server.id == activeId && isConnected
+                                ? "checkmark.circle.fill" : "circle")
+                                .foregroundColor(server.id == activeId ? .accentColor : .secondary)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(server.label.isEmpty ? server.hostname : server.label)
+                                    .foregroundColor(.primary)
+                                Text("\(server.hostname):\(String(server.port)) · \(server.hub)")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
                             }
-                            .swipeActions {
-                                Button(role: .destructive) {
-                                    AppModel.store.deleteServer(id: server.id)
-                                    reload()
-                                } label: { Label("Удалить", systemImage: "trash") }
-
-                                Button {
-                                    editingProfile = server
-                                } label: { Label("Изменить", systemImage: "pencil") }
-                            }
+                            Spacer()
                         }
                     }
+                    .swipeActions {
+                        Button(role: .destructive) {
+                            AppModel.store.deleteServer(id: server.id)
+                            reload()
+                        } label: { Label("Удалить", systemImage: "trash") }
 
-                    Section {
-                        if let message = importMessage {
-                            Text(message).font(.footnote).foregroundColor(.secondary)
-                        }
+                        Button {
+                            editingProfile = server
+                        } label: { Label("Изменить", systemImage: "pencil") }
                     }
                 }
-                .listStyle(.insetGrouped)
-
-                Button {
-                    if isConnected {
-                        VpnManager.shared.disconnect()
-                    } else if !activeId.isEmpty {
-                        VpnManager.shared.connect()
-                    }
-                } label: {
-                    Text(isConnected ? "ОТКЛЮЧИТЬСЯ" : "ПОДКЛЮЧИТЬСЯ")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(activeId.isEmpty)
-                .padding()
             }
+
+            Section {
+                if let message = importMessage {
+                    Text(message).font(.footnote).foregroundColor(.secondary)
+                }
+            }
+        }
+        .listStyle(.insetGrouped)
+    }
+
+    private var connectButton: some View {
+        Button {
+            if isConnected {
+                VpnManager.shared.disconnect()
+            } else if !activeId.isEmpty {
+                VpnManager.shared.connect()
+            }
+        } label: {
+            Text(isConnected ? "ОТКЛЮЧИТЬСЯ" : "ПОДКЛЮЧИТЬСЯ")
+                .font(.headline)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+        }
+        .buttonStyle(.borderedProminent)
+        .disabled(activeId.isEmpty)
+        .padding()
+    }
+
+    @ViewBuilder private var toolbarMenu: some View {
+        Menu {
+            Button { showEditorForNew = true } label: { Label("Добавить вручную", systemImage: "keyboard") }
+            Button { showScanner = true } label: { Label("Сканировать QR", systemImage: "qrcode.viewfinder") }
+            Button { showLinkDialog = true } label: { Label("Добавить по ссылке", systemImage: "link") }
+#if !USER_BUILD
+            Menu {
+                Button("Экспорт всех (QR)") { exportAll() }
+                ForEach(servers) { server in
+                    Button("QR: \(server.label.isEmpty ? server.hostname : server.label)") {
+                        exportProfile(server)
+                    }
+                }
+            } label: { Label("Экспорт QR", systemImage: "arrow.up.doc") }
+#endif
+        } label: {
+            Image(systemName: "ellipsis.circle")
+        }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            serverList
+            connectButton
         }
         .navigationTitle("SoftEther")
-        .toolbar {
-            Menu {
-                Button { showEditorForNew = true } label: { Label("Добавить вручную", systemImage: "keyboard") }
-                Button { showScanner = true } label: { Label("Сканировать QR", systemImage: "qrcode.viewfinder") }
-                Button { showLinkDialog = true } label: { Label("Добавить по ссылке", systemImage: "link") }
-#if !USER_BUILD
-                Menu {
-                    Button("Экспорт всех (QR)") { exportAll() }
-                    ForEach(servers) { server in
-                        Button("QR: \(server.label.isEmpty ? server.hostname : server.label)") {
-                            exportProfile(server)
-                        }
-                    }
-                } label: { Label("Экспорт QR", systemImage: "arrow.up.doc") }
-#endif
-            } label: {
-                Image(systemName: "ellipsis.circle")
-            }
-        }
+        .toolbar { toolbarMenu }
         .sheet(isPresented: $showScanner) {
             ScannerView { token in
                 showScanner = false
@@ -251,8 +258,10 @@ struct ServerListView: View {
 
     /// QR capacity ladder, as on Android: full → without cert → too large.
     private func exportTokenOrNull(_ build: (Bool) -> String) -> String? {
-        if let token = build(true), token.utf8.count <= QrImage.maxChars { return token }
-        if let token = build(false), token.utf8.count <= QrImage.maxChars { return token }
+        let full = build(true)
+        if full.utf8.count <= QrImage.maxChars { return full }
+        let withoutCert = build(false)
+        if withoutCert.utf8.count <= QrImage.maxChars { return withoutCert }
         return nil
     }
 
@@ -474,9 +483,9 @@ enum QrImage {
 
     static func generate(_ string: String) -> UIImage? {
         guard string.utf8.count <= maxChars else { return nil }
-        let filter = CIFilter.qrCodeGenerator()
-        filter.message = Data(string.utf8)
-        filter.correctionLevel = "L"
+        guard let filter = CIFilter(name: "CIQRCodeGenerator") else { return nil }
+        filter.setValue(Data(string.utf8), forKey: "inputMessage")
+        filter.setValue("L", forKey: "inputCorrectionLevel")
         guard let output = filter.outputImage else { return nil }
 
         let scale = 12.0 / output.extent.width
