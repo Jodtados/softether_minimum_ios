@@ -58,21 +58,21 @@ public final class UdpTerminal: @unchecked Sendable {
 
         // bind to the primary IPv4 interface address (as mvc does), else to any
         let bindAddress = Self.primaryIPv4Address()
-        var sockaddr = sockaddr_in()
-        sockaddr.sin_family = sa_family_t(AF_INET)
-        sockaddr.sin_port = 0
+        var addr = sockaddr_in() // local name must not shadow the `sockaddr` type
+        addr.sin_family = sa_family_t(AF_INET)
+        addr.sin_port = 0
         if let address = bindAddress {
-            sockaddr.sin_addr = address.withUnsafeBytes { $0.load(as: in_addr.self) }
+            addr.sin_addr = address.withUnsafeBytes { $0.load(as: in_addr.self) }
             localAddress = address
         }
 
-        let bindResult = withUnsafePointer(to: &sockaddr) { pointer in
+        let bindResult = withUnsafePointer(to: &addr) { pointer in
             pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
                 bind(descriptor, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
             }
         }
         guard bindResult == 0 else {
-            close(descriptor)
+            Darwin.close(descriptor)
             throw UdpTerminalError.socketFailed
         }
 
@@ -126,17 +126,17 @@ public final class UdpTerminal: @unchecked Sendable {
     }
 
     private func sockaddrFor(_ address: [UInt8], _ port: Int) -> sockaddr_in {
-        var sockaddr = sockaddr_in()
-        sockaddr.sin_family = sa_family_t(AF_INET)
-        sockaddr.sin_port = UInt16(port).bigEndian
-        sockaddr.sin_addr = address.withUnsafeBytes { $0.load(as: in_addr.self) }
-        return sockaddr
+        var addr = sockaddr_in()
+        addr.sin_family = sa_family_t(AF_INET)
+        addr.sin_port = UInt16(port).bigEndian
+        addr.sin_addr = address.withUnsafeBytes { $0.load(as: in_addr.self) }
+        return addr
     }
 
     public func sendPacket(_ data: [UInt8], to address: [UInt8], port: Int) throws {
-        var sockaddr = sockaddrFor(address, port)
+        var addr = sockaddrFor(address, port)
         let sent = data.withUnsafeBytes { rawBuffer -> Int in
-            withUnsafePointer(to: &sockaddr) { pointer in
+            withUnsafePointer(to: &addr) { pointer in
                 pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
                     sendto(fd, rawBuffer.baseAddress, data.count, 0, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
                 }
@@ -190,7 +190,7 @@ public final class UdpTerminal: @unchecked Sendable {
         }
 
         let nonce = bridge.nextBytes(chacha20Poly1305NonceSize)
-        let key = SymmetricKey(data: config.clientKey)
+        let key = SymmetricKey(data: Data(config.clientKey))
         let sealed = try ChaChaPoly.seal(
             Data(encryptBuffer.bytes[0 ..< encryptBuffer.position]),
             using: key,
@@ -245,8 +245,8 @@ public final class UdpTerminal: @unchecked Sendable {
         let nonce = Array(payload[0 ..< chacha20Poly1305NonceSize])
         let ciphertext = Array(payload[chacha20Poly1305NonceSize...])
 
-        guard let sealed = try? ChaChaPoly.SealedBox(nonce: ChaChaPoly.Nonce(data: Data(nonce)), ciphertext: Data(ciphertext)),
-              let decrypted = try? ChaChaPoly.open(sealed, using: SymmetricKey(data: config.serverKey))
+        guard let sealed = try? ChaChaPoly.SealedBox(combined: nonce + ciphertext),
+              let decrypted = try? ChaChaPoly.open(sealed, using: SymmetricKey(data: Data(config.serverKey)))
         else {
             // not for us (older key, stray packet); silently drop as mvc's AEADBadTagException path
             return nil
