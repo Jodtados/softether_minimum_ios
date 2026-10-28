@@ -10,11 +10,14 @@ on:
   push:
     tags: ['v*']
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install xcodegen
         run: brew install xcodegen
@@ -23,11 +26,13 @@ jobs:
         run: xcodegen generate
 
       - name: Build (unsigned)
+        shell: bash
         run: |
           FLAGS=""
           if [ "${{ inputs.user_build }}" = "true" ]; then
             FLAGS="OTHER_SWIFT_FLAGS=-DUSER_BUILD"
           fi
+          set +e
           xcodebuild \
             -project softether.xcodeproj \
             -scheme softether \
@@ -35,7 +40,20 @@ jobs:
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
             -derivedDataPath build \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY='' $FLAGS build
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY='' $FLAGS build > build.log 2>&1
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            grep -E 'error:' build.log | head -25 | while IFS= read -r line; do
+              echo "::error::${line:0:220}"
+            done
+            if ! grep -q 'error:' build.log; then
+              tail -n 8 build.log | while IFS= read -r line; do
+                echo "::error::${line:0:220}"
+              done
+            fi
+            exit "$status"
+          fi
 
       - name: Pack unsigned IPA
         run: |
@@ -49,3 +67,12 @@ jobs:
           name: SoftEther-unsigned
           path: build/SoftEther-unsigned.ipa
           if-no-files-found: error
+
+      - name: Attach IPA to release (tag builds)
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" build/SoftEther-unsigned.ipa \
+            --title "$GITHUB_REF_NAME" \
+            --notes "Unsigned IPA. Установка через Sideloadly (инструкция в README)."
