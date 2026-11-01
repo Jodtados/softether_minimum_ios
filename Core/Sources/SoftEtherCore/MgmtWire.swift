@@ -124,7 +124,7 @@ public func newDeviceId() -> String {
 /// "" disables dedup (same as Android ROMs without ANDROID_ID).
 public func mgmtHardwareId(rawInstallId: String) -> String {
     guard !rawInstallId.isEmpty else { return "" }
-    let digest = SHA256.hash(data: Data("mvc-hwid:".utf8 + rawInstallId.utf8))
+    let digest = SHA256.hash(data: Data("mvc-hwid:\(rawInstallId)".utf8))
     return digest.map { String(format: "%02x", $0) }.joined().prefix(32).description
 }
 
@@ -157,7 +157,7 @@ public enum Totp {
 
         let counter = UInt64(max(0, nowMillis)) / 1000 / period
         for skew in -1 ... 1 {
-            let shifted = Int64(counter) + skew
+            let shifted = Int64(counter) + Int64(skew)
             let candidate = shifted < 0 ? UInt64(0) : UInt64(shifted)
             let expected = Array(hotp(key: key, counter: candidate).utf8)
             if constantTimeEquals(expected, Array(code.utf8)) { return true }
