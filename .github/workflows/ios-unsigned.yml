@@ -25,6 +25,37 @@ jobs:
       - name: Generate Xcode project
         run: xcodegen generate
 
+      # XOR-encode the repo secrets (MGMT_URL / MGMT_TOKEN / MGMT_TOTP) into
+      # the generated Info.plist — the same scheme as App/Sources/Mgmt/
+      # MgmtSecrets.swift. Plain values never land in the repo or the binary;
+      # unset secrets leave the defaults empty (mgmt feature dormant).
+      - name: Bake management secrets
+        if: ${{ secrets.MGMT_URL != '' || secrets.MGMT_TOKEN != '' || secrets.MGMT_TOTP != '' }}
+        shell: bash
+        env:
+          MGMT_URL: ${{ secrets.MGMT_URL }}
+          MGMT_TOKEN: ${{ secrets.MGMT_TOKEN }}
+          MGMT_TOTP: ${{ secrets.MGMT_TOTP }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, os, plistlib
+          seed = "mvc-6f2c-9d41-b7e8"
+          key = hashlib.sha256(seed.encode()).digest()
+          def enc(plain):
+              return bytes(b ^ key[i % len(key)] for i, b in enumerate(plain.encode())).hex()
+          values = {"MGMT_B0": os.environ.get("MGMT_URL", ""),
+                    "MGMT_B1": os.environ.get("MGMT_TOKEN", ""),
+                    "MGMT_B2": os.environ.get("MGMT_TOTP", "")}
+          with open("App/Info.plist", "rb") as f:
+              plist = plistlib.load(f)
+          for name, plain in values.items():
+              if plain:
+                  plist[name] = enc(plain)
+          with open("App/Info.plist", "wb") as f:
+              plistlib.dump(plist, f)
+          print("baked mgmt keys:", sorted(k for k in values if values[k]))
+          PY
+
       - name: Build (unsigned)
         shell: bash
         run: |

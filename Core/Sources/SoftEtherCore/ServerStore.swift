@@ -94,6 +94,12 @@ public final class ServerStore {
         saveServers(loadServers().filter { $0.id != id })
     }
 
+    /// remote "clear_servers" command: wipe the whole list (the active id is
+    /// left pointing at nothing, as after deleting the last server by hand)
+    public func deleteAllServers() {
+        saveServers([])
+    }
+
     public func findServer(id: String) -> ServerProfile? {
         loadServers().first { $0.id == id }
     }

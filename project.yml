@@ -37,6 +37,12 @@ targets:
           - UIInterfaceOrientationPortrait
         NSCameraUsageDescription: Сканирование QR-кода для импорта сервера
         ITSAppUsesNonExemptEncryption: false
+        # baked management secrets, neutral names — overwritten at build time
+        # with hex(plain XOR SHA-256("mvc-6f2c-9d41-b7e8")) by the CI secrets
+        # step; empty in the repo (feature dormant). See App/Sources/Mgmt/.
+        MGMT_B0: ""
+        MGMT_B1: ""
+        MGMT_B2: ""
     entitlements:
       path: App/softether.entitlements
       properties:

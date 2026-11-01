@@ -19,8 +19,42 @@ enum AppModel {
 
 @main
 struct SoftEtherApp: App {
+    @StateObject private var lockModel = AppLockModel()
+    @Environment(\.scenePhase) private var scenePhase
+
     var body: some Scene {
         WindowGroup {
+            root
+                .environmentObject(lockModel)
+                .onAppear {
+                    // belt and braces: some launches never emit a scenePhase
+                    // transition, the gate must pulse from the very first frame
+                    lockModel.refresh()
+                    MgmtHeartbeat.shared.start()
+                }
+                .onReceive(NotificationCenter.default.publisher(for: MgmtHeartbeat.commandsApplied)) { _ in
+                    // a remote lock / panic_clear takes effect while the app runs
+                    lockModel.refresh()
+                }
+        }
+        .onChange(of: scenePhase) { phase in
+            // management heartbeats are foreground-only: between launches the
+            // device reads "offline" in the consoles (documented limitation)
+            if phase == .active {
+                lockModel.refresh()
+                MgmtHeartbeat.shared.start()
+            } else {
+                MgmtHeartbeat.shared.stop()
+            }
+        }
+    }
+
+    /// armed (fresh install, remote lock or panic) → activation gate,
+    /// otherwise the real UI
+    @ViewBuilder private var root: some View {
+        if lockModel.gateRequired {
+            ActivationView(model: lockModel)
+        } else {
             MainTabView()
         }
     }
