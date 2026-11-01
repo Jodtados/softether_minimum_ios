@@ -4,6 +4,7 @@
 // "mvc-hwid:" dedup scheme.
 
 import XCTest
+import CryptoKit
 @testable import SoftEtherCore
 
 final class MgmtWireTests: XCTestCase {
