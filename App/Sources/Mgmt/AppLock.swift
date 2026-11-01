@@ -6,6 +6,7 @@
 // (not the app group: the tunnel provider never reads it).
 
 import Foundation
+import SoftEtherCore
 
 enum AppLock {
     private static let activatedKey = "app_activated"
