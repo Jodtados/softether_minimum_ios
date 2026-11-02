@@ -42,12 +42,12 @@ final class FailoverTests: XCTestCase {
     }
 
     func testSingleServerLoopsOnItself() {
-        let single = [list[0]]
+        let single = [list[0]] // id "a"
 
-        let plan = planFailover(servers: single, currentId: "only", consecutiveFailures: 0, loopForever: true)
-        XCTAssertEqual(.switchTo(targetId: "only", delayMs: 3000, attempt: 1, fullCircle: true), plan)
+        let plan = planFailover(servers: single, currentId: "a", consecutiveFailures: 0, loopForever: true)
+        XCTAssertEqual(.switchTo(targetId: "a", delayMs: 3000, attempt: 1, fullCircle: true), plan)
 
-        XCTAssertEqual(.stop, planFailover(servers: single, currentId: "only", consecutiveFailures: 0, loopForever: false))
+        XCTAssertEqual(.stop, planFailover(servers: single, currentId: "a", consecutiveFailures: 0, loopForever: false))
     }
 
     func testUnknownCurrentIdFallsBackToFirstIndex() {
