@@ -62,6 +62,13 @@ final class VpnManager {
                 }
             } catch {
                 NSLog("[SoftEther] connect failed: %@", String(describing: error))
+                // surface the failure in the app status instead of dying silently:
+                // code 5 (permission denied) = the signing profile has no
+                // packet-tunnel entitlement — free Apple ID / Sideloadly installs
+                let text = (error as NSError).domain == "NEVPNErrorDomain" && (error as NSError).code == 5
+                    ? "Ошибка: VPN-профиль запрещён подписью (нужен платный Apple Developer или установку делать через Xcode с правами на NetworkExtension)"
+                    : "Ошибка: \(error.localizedDescription)"
+                AppModel.sharedDefaults.set(text, forKey: prefStatusText)
             }
         }
     }

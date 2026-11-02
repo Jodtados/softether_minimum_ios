@@ -7,7 +7,10 @@ import NetworkExtension
 import SoftEtherCore
 
 let appGroupId = "group.com.jodtados.softether"
-let providerBundleId = "com.jodtados.softether.ne"
+// Sideloadly/free-team installs append a team suffix to every bundle id
+// (com.jodtados.softether.STXW9QJYP9) — derive the NE id at runtime or the
+// app would keep looking for the unsuffixed extension and never find it
+let providerBundleId = (Bundle.main.bundleIdentifier ?? "com.jodtados.softether") + ".ne"
 
 enum AppModel {
     static var sharedDefaults: UserDefaults { UserDefaults(suiteName: appGroupId) ?? .standard }
