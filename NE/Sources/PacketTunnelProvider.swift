@@ -13,6 +13,18 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     private var store: ServerStore?
     private var rotationStartedAt: Date?
 
+    // failover cycle state (service/SoftEtherVpnService.kt, Android 0.9.0/0.9.1);
+    // reset on establish and on a fresh user intent
+    private var consecutiveFailures = 0
+    // some servers (SoftEther 5.x) drop the dial when UDP acceleration is
+    // requested: the flag gives the next dial a TCP-only path
+    private var udpDisabledForNextDial = false
+    private var dialedWithUdp = false
+    private var failoverTask: Task<Void, Never>?
+
+    enum StartKind { case freshUser, plannedSwitch, failoverSwitch }
+    private var nextStartKind: StartKind = .freshUser
+
     override func startTunnel(options: [String: NSObject]?, completionHandler: @escaping (Error?) -> Void) {
         let sharedDefaults = UserDefaults(suiteName: appGroupId)
         defaults = sharedDefaults
@@ -27,6 +39,16 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         }
 
         var config = store.tunnelConfig(for: profile)
+
+        // failover bookkeeping: a fresh user intent retries UDP acceleration,
+        // a planned move (rotation/limit) dials fresh too; a failover switch
+        // keeps the current flags (the circle stays TCP-only once tripped)
+        let startKind = nextStartKind
+        nextStartKind = .freshUser
+        if startKind == .freshUser { consecutiveFailures = 0 }
+        if startKind != .failoverSwitch { udpDisabledForNextDial = false }
+        if udpDisabledForNextDial { config.udpAccelerationEnabled = false }
+        dialedWithUdp = config.udpAccelerationEnabled
 
         // app-supplied overrides (rotation restarts reuse the same mechanism)
         if let hostname = options?["hostname"] as? String { config.serverHostname = hostname }
@@ -87,6 +109,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
 
     override func stopTunnel(with reason: NEProviderStopReason, completionHandler: @escaping () -> Void) {
         isStopping = true
+        failoverTask?.cancel()
         controller?.kill(nil)
         controller = nil
         setTunnelNetworkSettings(nil) { _ in }
@@ -138,30 +161,104 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         pendingRotationRestart = false
         finishLock.unlock()
 
+        if established { consecutiveFailures = 0 } // reset on establish
+
         if let completion {
             if established {
                 // established once — the start call already succeeded
                 completion(nil)
                 publishStatus(text: "Подключено")
             } else {
-                completion(TunnelError.handshake(errorHeader ?? "ERR"))
-                publishStatus(text: "Ошибка: \(errorHeader ?? "ERR")")
-                return
+                // dial failed: report success so the tunnel stays alive and the
+                // failover cycle runs inside it (status text stays truthful)
+                completion(nil)
+                scheduleFailover(dialFailure: true, errorHeader: errorHeader)
             }
+            return
         }
 
         if shouldRestart, !isStopping {
             // limit / rotation switch: reconnect with the new active profile
+            nextStartKind = .plannedSwitch
             restart()
             return
         }
 
-        publishStatus(text: errorHeader == nil ? "Отключено" : "Ошибка: \(errorHeader!)")
-
-        // a live session that died on its own: stop the configuration
-        if established, !isStopping {
-            cancelTunnelWithError(nil)
+        if isStopping {
+            publishStatus(text: errorHeader == nil ? "Отключено" : "Ошибка: \(errorHeader!)")
+            return
         }
+
+        // a dial that never came up, or a live session that died on its own:
+        // plan the move to the next server (0.9.0), don't just drop the tunnel
+        scheduleFailover(dialFailure: !established, errorHeader: errorHeader)
+    }
+
+    // MARK: failover (scheduleFailover/failoverNow, Android 0.9.0 + 0.9.1)
+
+    private func scheduleFailover(dialFailure: Bool, errorHeader: String?) {
+        guard !isStopping, let store else { return }
+
+        // a dial that died with UDP acceleration requested gets one TCP-only retry of the
+        // SAME server before the circle moves on: SoftEther 5.x drops such sessions at once
+        if dialFailure && dialedWithUdp && !udpDisabledForNextDial {
+            udpDisabledForNextDial = true
+            publishStatus(text: "Подключение…")
+            failoverTask = Task { [weak self] in
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                self?.failoverNow(targetId: nil) // nil = same server, now TCP-only
+            }
+            return
+        }
+
+        let plan = planFailover(
+            servers: store.loadServers(),
+            currentId: store.activeServerId(),
+            consecutiveFailures: consecutiveFailures,
+            loopForever: store.failoverLoop
+        )
+
+        switch plan {
+        case .stop:
+            publishStatus(text: "Не удалось подключиться: серверы недоступны")
+            cancelTunnelWithError(nil)
+
+        case let .switchTo(targetId, delayMs, attempt, fullCircle):
+            consecutiveFailures = attempt
+
+            let label = store.findServer(id: targetId)?.label.trimmingCharacters(in: .whitespaces)
+            let server = (label?.isEmpty == false) ? label! : "сервер"
+            // no popup notification (0.9.2): only the persistent status updates
+            publishStatus(text: fullCircle
+                ? "Все серверы недоступны — продолжаю по кругу"
+                : "Переподключение к \(server) через \(delayMs / 1000) с…")
+
+            failoverTask = Task { [weak self] in
+                try? await Task.sleep(nanoseconds: UInt64(delayMs) * 1_000_000)
+                self?.failoverNow(targetId: targetId)
+            }
+        }
+    }
+
+    private func failoverNow(targetId: String?) {
+        guard !isStopping, let store else { return }
+
+        // the list may have changed while the backoff was running
+        let servers = store.loadServers()
+        guard !servers.isEmpty else {
+            publishStatus(text: "Не удалось подключиться: серверы недоступны")
+            cancelTunnelWithError(nil)
+            return
+        }
+
+        // nil target = the TCP-only retry of the same (still active) server
+        let target = targetId.flatMap { id in servers.first { $0.id == id } }
+            ?? store.activeServer()
+            ?? servers[0]
+
+        store.setActiveServer(target.id, isUserInitiated: false)
+        nextStartKind = .failoverSwitch
+        restart()
     }
 
     private func restart() {

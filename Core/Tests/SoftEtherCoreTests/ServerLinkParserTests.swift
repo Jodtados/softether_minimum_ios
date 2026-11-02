@@ -75,6 +75,17 @@ final class ServerLinkParserTests: XCTestCase {
         XCTAssertNil(parsed.port)
     }
 
+    // 0.9.4: links copied out of a messenger arrive wrapped, with NBSP or
+    // zero-width chars inside and around them
+    func testMessengerSeamsAreStripped() {
+        let wrapped = "https://vpn.example.\u{00A0}org\n?hub=VPN\u{200B}"
+
+        let parsed = ServerLinkParser.parse(wrapped)
+
+        XCTAssertEqual("vpn.example.org", parsed?.hostname)
+        XCTAssertEqual("VPN", parsed?.hub)
+    }
+
     func testGarbageYieldsNull() {
         XCTAssertNil(ServerLinkParser.parse(""))
         XCTAssertNil(ServerLinkParser.parse("   "))

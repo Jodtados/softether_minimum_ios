@@ -25,6 +25,11 @@ public let prefMacAddress = "ETHERNET_MAC_ADDRESS"
 public let prefStatusText = "STATUS_TEXT"
 public let prefUsedBytesSnapshot = "USED_BYTES_SNAPSHOT"
 public let prefServerSecret = "MVC_QR_SECRET"
+public let prefDefaultUsername = "DEFAULT_USERNAME"
+public let prefDefaultPassword = "DEFAULT_PASSWORD"
+public let prefDefaultHub = "DEFAULT_HUB"
+public let prefDefaultPort = "DEFAULT_PORT"
+public let prefFailoverLoop = "FAILOVER_LOOP"
 
 public struct ServerProfile: Equatable, Codable, Identifiable {
     public var id: String
@@ -170,7 +175,7 @@ public final class ServerStore {
     }
 
     public var ethernetMTU: Int {
-        get { defaults.object(forKey: prefEthernetMTU) as? Int ?? 1500 }
+        get { defaults.object(forKey: prefEthernetMTU) as? Int ?? 1450 } // Android 0.9.0 default
         set { defaults.set(newValue, forKey: prefEthernetMTU) }
     }
 
@@ -233,6 +238,59 @@ public final class ServerStore {
         config.ethernetMTU = ethernetMTU
         return config
     }
+
+    // MARK: shared server defaults (control/ServerDefaults.kt, Android 0.9.0)
+
+    /// Shared hub/port/credentials applied to every server at once.
+    public func loadServerDefaults() -> ServerDefaults {
+        ServerDefaults(
+            username: defaults.string(forKey: prefDefaultUsername) ?? "",
+            password: defaults.string(forKey: prefDefaultPassword) ?? "",
+            hub: defaults.string(forKey: prefDefaultHub).flatMap { $0.isEmpty ? nil : $0 } ?? ServerDefaults().hub,
+            port: defaults.string(forKey: prefDefaultPort).flatMap(Int.init) ?? ServerDefaults().port
+        )
+    }
+
+    public func saveServerDefaults(_ value: ServerDefaults) {
+        defaults.set(value.username, forKey: prefDefaultUsername)
+        defaults.set(value.password, forKey: prefDefaultPassword)
+        defaults.set(value.hub, forKey: prefDefaultHub)
+        defaults.set(String(value.port), forKey: prefDefaultPort)
+    }
+
+    /// Overwrites the shared fields on every server; id/label/hostname/cert stay intact.
+    public func applyDefaultsToServers(_ value: ServerDefaults) {
+        saveServers(loadServers().map { profile in
+            var profile = profile
+            profile.username = value.username
+            profile.password = value.password
+            profile.hub = value.hub
+            profile.port = value.port
+            return profile
+        })
+    }
+
+    /// FAILOVER_LOOP (Android 0.9.0): keep rotating forever after failures;
+    /// off = every server gets exactly one attempt before giving up.
+    public var failoverLoop: Bool {
+        if defaults.object(forKey: prefFailoverLoop) == nil { return true }
+        return defaults.bool(forKey: prefFailoverLoop)
+    }
+}
+
+/// Shared hub/port/credentials applied to every server at once (Android 0.9.0).
+public struct ServerDefaults: Equatable {
+    public var username: String
+    public var password: String
+    public var hub: String
+    public var port: Int
+
+    public init(username: String = "", password: String = "", hub: String = "mobil", port: Int = 443) {
+        self.username = username
+        self.password = password
+        self.hub = hub
+        self.port = port
+    }
 }
 
 extension Array where Element == UInt8 {
@@ -270,8 +328,13 @@ public enum ServerLinkParser {
         }
     }
 
+    // a link copied out of a messenger arrives line-wrapped, with NBSP or
+    // zero-width seams; none of those are valid link characters, so strip them
+    private static let seamPattern = "[\\s\\u00A0\\u200B-\\u200D\\uFEFF]+"
+
     public static func parse(_ raw: String) -> ParsedServer? {
-        let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let text = raw.replacingOccurrences(of: seamPattern, with: "", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         if text.isEmpty { return nil }
 
         if text.lowercased().hasPrefix("vpn://") {

@@ -185,7 +185,7 @@ public struct TunnelConfig: Sendable {
     public var selectedCipherSuites: [String] = []
 
     public var udpAccelerationEnabled = true
-    public var ethernetMTU = 1500
+    public var ethernetMTU = 1450 // Android 0.9.0 default; TCP path honors the preference
 
     // derived
     public var internalEthernetMTU: Int {

@@ -1,6 +1,7 @@
 // Cross-platform MVC1 vectors, ported 1:1 from softether_minimum QrPayloadTest.kt.
 
 import XCTest
+import CryptoKit
 @testable import SoftEtherCore
 
 final class QrPayloadTests: XCTestCase {
@@ -185,5 +186,124 @@ final class QrPayloadTests: XCTestCase {
         """
 
         XCTAssertNil(QrPayload.decode(QrPayload.seal(json, key: key), key: key))
+    }
+
+    // -- 0.9.3: credentials-free imports -------------------------------------
+
+    func testEmptyCredentialsAreAccepted() {
+        let json = #"{"hostname":"h","hub":"VPN","port":443}"#
+
+        let decoded = decodeSingle(QrPayload.seal(json, key: key))
+
+        XCTAssertNotNil(decoded)
+        XCTAssertEqual("", decoded?.username)
+        XCTAssertEqual("", decoded?.password)
+    }
+
+    func testEmptyCredentialsRoundtrip() {
+        var noCreds = profile
+        noCreds.username = ""
+        noCreds.password = ""
+        let decoded = decodeSingle(QrPayload.encode(noCreds, key: key))
+
+        XCTAssertNotNil(decoded)
+        XCTAssertEqual("", decoded?.username)
+        XCTAssertEqual("", decoded?.password)
+        XCTAssertEqual("vpn.example.com", decoded?.hostname)
+    }
+
+    // -- 0.9.4: messenger seams + compact tokens ------------------------------
+
+    func testLineWrappedTokenStillDecodes() {
+        // a token shared as text (messenger, clipboard) arrives line-wrapped:
+        // every whitespace seam must be stripped before base64url decoding
+        let token = QrPayload.encode(profile, key: key)
+        var wrapped = ""
+        for (index, char) in token.enumerated() {
+            if index > 0 && index % 13 == 0 { wrapped += "\r\n" }
+            wrapped.append(char)
+        }
+
+        let decoded = decodeSingle(wrapped)
+
+        XCTAssertNotNil(decoded)
+        XCTAssertEqual(profile.hostname, decoded?.hostname)
+    }
+
+    func testNbspAndZeroWidthAreStrippedToo() {
+        let token = QrPayload.encode(profile, key: key)
+        // NBSP (U+00A0), zero-width space (U+200B), BOM (U+FEFF) mid-token
+        let seams = String(String.UnicodeScalarView([
+            Unicode.Scalar(0x00A0)!, Unicode.Scalar(0x200B)!, Unicode.Scalar(0xFEFF)!,
+        ]))
+        let index = token.index(token.startIndex, offsetBy: 5)
+        let dirty = String(token[..<index]) + seams + String(token[index...])
+
+        XCTAssertNotNil(QrPayload.decode(dirty, key: key))
+    }
+
+    func testDefaultsAreOmittedAndStillDecode() {
+        // empty label/credentials and port 443 are not written; the decoder
+        // fills them back in (older installs read the short form the same way)
+        var minimal = profile
+        minimal.label = ""
+        minimal.username = ""
+        minimal.password = ""
+        minimal.port = 443
+        minimal.trustedCertPem = nil
+
+        let decoded = QrPayload.decode(QrPayload.encodeAll([minimal], key: key), key: key)?.first
+
+        XCTAssertNotNil(decoded)
+        XCTAssertEqual("", decoded?.label)
+        XCTAssertEqual("", decoded?.username)
+        XCTAssertEqual("", decoded?.password)
+        XCTAssertEqual(443, decoded?.port)
+    }
+
+    func testCompactPlaintextOmitsDefaultKeys() {
+        // byte-level parity with Android 0.9.4: the sealed JSON carries
+        // hostname/hub only — no label/username/password/port for defaults
+        var minimal = profile
+        minimal.label = ""
+        minimal.username = ""
+        minimal.password = ""
+        minimal.port = 443
+        minimal.trustedCertPem = nil
+
+        let raw = QrPayload.base64UrlDecode(String(QrPayload.encode(minimal, key: key).dropFirst("MVC1:".count)))!
+        let sealed = try! AES.GCM.SealedBox(
+            nonce: AES.GCM.Nonce(data: Data(raw[..<12])),
+            ciphertext: Data(raw[12..<(raw.count - 16)]),
+            tag: Data(raw[(raw.count - 16)...])
+        )
+        let plain = try! AES.GCM.open(sealed, using: SymmetricKey(data: Data(key)))
+        let json = String(data: plain, encoding: .utf8)!
+
+        XCTAssertEqual(#"{"hostname":"vpn.example.com","hub":"VPN"}"#, json)
+    }
+
+    func testHostnameLabelIsNotDuplicated() {
+        // label == hostname is dropped on encode; import names it by hostname
+        var named = profile
+        named.label = profile.hostname
+        let decoded = decodeSingle(QrPayload.encode(named, key: key))
+
+        XCTAssertNotNil(decoded)
+        XCTAssertEqual("", decoded?.label)
+        XCTAssertEqual(profile.hostname, decoded?.hostname)
+    }
+
+    func testIsMvcTokenDetectsWrappedAndForeignText() {
+        let token = QrPayload.encode(profile, key: key)
+        var wrapped = ""
+        for (index, char) in token.enumerated() {
+            if index > 0 && index % 11 == 0 { wrapped += "\n " }
+            wrapped.append(char)
+        }
+
+        XCTAssertTrue(QrPayload.isMvcToken(wrapped))
+        XCTAssertFalse(QrPayload.isMvcToken("https://vpn.example.com:443?hub=VPN"))
+        XCTAssertFalse(QrPayload.isMvcToken("MVC2:" + String(token.dropFirst("MVC1:".count))))
     }
 }

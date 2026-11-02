@@ -204,7 +204,14 @@ struct ServerListView: View {
             NavigationStack { ServerEditorView(profile: profile) }
         }
         .sheet(isPresented: $showEditorForNew) {
-            NavigationStack { ServerEditorView(profile: ServerProfile(label: "", hostname: "", hub: "", username: "", password: "")) }
+            NavigationStack {
+                // prefilled from the shared server defaults (Android 0.9.0)
+                let shared = AppModel.store.loadServerDefaults()
+                ServerEditorView(profile: ServerProfile(
+                    label: "", hostname: "", hub: shared.hub,
+                    username: shared.username, password: shared.password, port: shared.port
+                ))
+            }
         }
         .sheet(isPresented: $showExportSheet) {
             if let token = exportToken {
@@ -284,6 +291,15 @@ struct ServerListView: View {
                 port: parsed.port ?? 443
             )
             importMessage = nil
+            return
+        }
+
+        // token-shaped but undecodable: a damaged copy or a foreign QR-secret,
+        // not an unrecognized link (Android 0.9.4)
+        if QrPayload.isMvcToken(raw) {
+            importMessage = AppModel.qrSecret.isEmpty
+                ? "Токен MVC1: задайте QR-секрет в настройках"
+                : "Токен MVC1 не расшифрован: проверьте QR-секрет"
             return
         }
 
@@ -374,7 +390,7 @@ struct ServerEditorView: View {
                     AppModel.store.saveServer(profile)
                     dismiss()
                 }
-                .disabled(profile.hostname.isEmpty || profile.hub.isEmpty || profile.username.isEmpty)
+                .disabled(profile.hostname.isEmpty || profile.hub.isEmpty) // credentials optional (0.9.3): filled in later
             }
         }
         .onAppear {
@@ -390,11 +406,18 @@ struct SettingsView: View {
     @State private var doSelectSuites = true
     @State private var suites: [String] = []
     @State private var udpEnabled = true
-    @State private var mtu = 1500
+    @State private var mtu = 1450
     @State private var limitEnabled = true
     @State private var limitMB = defaultLimitMB
     @State private var rotationMinutes = 30
+    @State private var failoverLoop = true
     @State private var qrSecret = ""
+    @State private var defaultsUsername = ""
+    @State private var defaultsPassword = ""
+    @State private var defaultsHub = "mobil"
+    @State private var defaultsPort = 443
+    @State private var showDeleteAllConfirm = false
+    @State private var serversExist = false
 
     private let suiteOptions = [
         "TLS_AES_256_GCM_SHA384", "TLS_CHACHA20_POLY1305_SHA256", "TLS_AES_128_GCM_SHA256",
@@ -438,6 +461,48 @@ struct SettingsView: View {
             }
 
             Section {
+                Toggle("Продолжать по кругу", isOn: $failoverLoop)
+            } header: {
+                Text("Failover")
+            } footer: {
+                Text("Сбой подключения → переключение на следующий сервер (3/6/12/24/48 с). Выкл. — одна попытка на сервер.")
+            }
+
+            Section {
+                TextField("Имя пользователя", text: $defaultsUsername)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                SecureField("Пароль", text: $defaultsPassword)
+                TextField("Хаб", text: $defaultsHub)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                Stepper("Порт: \(defaultsPort)", value: $defaultsPort, in: 1 ... 65535)
+                Button("Применить ко всем серверам") {
+                    AppModel.store.applyDefaultsToServers(.init(
+                        username: defaultsUsername, password: defaultsPassword,
+                        hub: defaultsHub, port: defaultsPort
+                    ))
+                }
+                .disabled(!serversExist)
+                Button("Удалить все серверы", role: .destructive) {
+                    showDeleteAllConfirm = true
+                }
+                .disabled(!serversExist)
+                .confirmationDialog("Удалить все серверы?", isPresented: $showDeleteAllConfirm, titleVisibility: .visible) {
+                    Button("Удалить", role: .destructive) {
+                        AppModel.store.deleteAllServers()
+                        serversExist = false
+                    }
+                } message: {
+                    Text("Список и счётчики трафика будут стёрты.")
+                }
+            } header: {
+                Text("Общие для всех серверов")
+            } footer: {
+                Text("Логин/пароль/хаб/порт — применяются ко всем серверам разом и подставляются в новые.")
+            }
+
+            Section {
                 SecureField("QR-секрет (Base32)", text: $qrSecret)
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
@@ -470,7 +535,14 @@ struct SettingsView: View {
         limitEnabled = store.trafficLimitEnabled
         limitMB = store.trafficLimitMB
         rotationMinutes = store.rotationIntervalMinutes
+        failoverLoop = store.failoverLoop
         qrSecret = AppModel.qrSecret
+        let shared = store.loadServerDefaults()
+        defaultsUsername = shared.username
+        defaultsPassword = shared.password
+        defaultsHub = shared.hub
+        defaultsPort = shared.port
+        serversExist = !store.loadServers().isEmpty
     }
 
     private func save() {
@@ -483,6 +555,11 @@ struct SettingsView: View {
         store.trafficLimitEnabled = limitEnabled
         store.trafficLimitMB = limitMB
         store.rotationIntervalMinutes = rotationMinutes
+        AppModel.sharedDefaults.set(failoverLoop, forKey: prefFailoverLoop)
+        store.saveServerDefaults(.init(
+            username: defaultsUsername, password: defaultsPassword,
+            hub: defaultsHub, port: defaultsPort
+        ))
         AppModel.sharedDefaults.set(qrSecret, forKey: prefServerSecret)
     }
 }

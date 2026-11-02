@@ -10,6 +10,19 @@ public enum QrPayload {
     static let prefix = "MVC1:"
     static let base32Alphabet = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZ234567")
 
+    // messengers wrap long tokens when sharing as text: every seam (spaces,
+    // line breaks, NBSP, zero-width) must go before base64url decoding
+    private static let seamPattern = "[\\s\\u00A0\\u200B-\\u200D\\uFEFF]+"
+
+    private static func stripSeams(_ text: String) -> String {
+        text.replacingOccurrences(of: seamPattern, with: "", options: .regularExpression)
+    }
+
+    /// A token-shaped text, even when it fails to decode (damaged copy, foreign build).
+    public static func isMvcToken(_ text: String) -> Bool {
+        stripSeams(text).hasPrefix(prefix)
+    }
+
     public struct Entry: Equatable {
         public var label: String
         public var hostname: String
@@ -47,13 +60,25 @@ public enum QrPayload {
         return seal(json, key: key)
     }
 
+    // keep the token small: anything the decoder already defaults to is skipped
+    // (empty strings, port 443, a label equal to the hostname). Older installs
+    // read the shortened form fine: optString("") / optInt(443) cover the gaps.
     private static func profileJson(_ profile: ServerProfile, _ includeCert: Bool) -> String {
-        var json = "{\"label\":\(jsonEscape(profile.label))"
-            + ",\"hostname\":\(jsonEscape(profile.hostname))"
+        var json = "{\"hostname\":\(jsonEscape(profile.hostname))"
             + ",\"hub\":\(jsonEscape(profile.hub))"
-            + ",\"username\":\(jsonEscape(profile.username))"
-            + ",\"password\":\(jsonEscape(profile.password))"
-            + ",\"port\":\(String(profile.port))"
+
+        if !profile.label.isEmpty && profile.label != profile.hostname {
+            json += ",\"label\":\(jsonEscape(profile.label))"
+        }
+        if !profile.username.isEmpty {
+            json += ",\"username\":\(jsonEscape(profile.username))"
+        }
+        if !profile.password.isEmpty {
+            json += ",\"password\":\(jsonEscape(profile.password))"
+        }
+        if profile.port != 443 {
+            json += ",\"port\":\(String(profile.port))"
+        }
 
         if includeCert, let body = pemBody(profile.trustedCertPem) {
             json += ",\"cert\":\(jsonEscape(body))"
@@ -80,9 +105,10 @@ public enum QrPayload {
     }
 
     public static func decode(_ token: String, key: [UInt8]) -> [Entry]? {
-        guard token.hasPrefix(prefix) else { return nil }
+        let cleaned = stripSeams(token)
+        guard cleaned.hasPrefix(prefix) else { return nil }
 
-        return decodeRaw(token, key: key)
+        return decodeRaw(cleaned, key: key)
     }
 
     private static func decodeRaw(_ token: String, key: [UInt8]) -> [Entry]? {
@@ -130,10 +156,9 @@ public enum QrPayload {
             port = 443
         }
 
+        // credentials may be empty: the user fills them in after import
         if hostname.trimmingCharacters(in: .whitespaces).isEmpty
             || hub.trimmingCharacters(in: .whitespaces).isEmpty
-            || username.trimmingCharacters(in: .whitespaces).isEmpty
-            || password.trimmingCharacters(in: .whitespaces).isEmpty
         {
             return nil
         }
