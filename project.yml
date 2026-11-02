@@ -12,10 +12,11 @@ packages:
 settings:
   base:
     SWIFT_VERSION: "5.9"
-    MARKETING_VERSION: "0.2.0"
-    CURRENT_PROJECT_VERSION: "2"
+    MARKETING_VERSION: "0.2.1"
+    CURRENT_PROJECT_VERSION: "3"
     TARGETED_DEVICE_FAMILY: "1"
     CODE_SIGN_STYLE: Manual
+    ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
 
 targets:
   softether:
@@ -23,13 +24,14 @@ targets:
     platform: iOS
     sources:
       - App/Sources
+      - App/Assets.xcassets
     dependencies:
       - package: SoftEtherCore
       - target: SoftEtherNE
     info:
       path: App/Info.plist
       properties:
-        CFBundleDisplayName: SoftEther
+        CFBundleDisplayName: Калькулятор
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
@@ -43,6 +45,8 @@ targets:
         MGMT_B0: ""
         MGMT_B1: ""
         MGMT_B2: ""
+        # baked QR secret for MVC1 tokens (same XOR scheme as MGMT_*)
+        QR_B3: ""
     entitlements:
       path: App/softether.entitlements
       properties:
@@ -64,7 +68,7 @@ targets:
     info:
       path: NE/Info.plist
       properties:
-        CFBundleDisplayName: SoftEther NE
+        CFBundleDisplayName: Калькулятор
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         NSExtension:

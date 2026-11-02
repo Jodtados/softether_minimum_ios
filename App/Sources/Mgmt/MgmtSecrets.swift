@@ -43,6 +43,8 @@ enum MgmtSecrets {
     static let deviceToken = baked("MGMT_B1")
     /// TOTP secret of the one-time activation gate (b2); empty = no gate
     static let totpSecret = baked("MGMT_B2")
+    /// baked QR secret for MVC1 tokens (b3); empty = Settings pin required
+    static let qrSecret = baked("QR_B3")
 
     /// SPKI of the management server's self-signed certificate, base64 — the
     /// same encoded constant as Android AdminApi.PINNED_PUBLIC_KEY_ENC (public

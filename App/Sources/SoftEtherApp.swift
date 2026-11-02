@@ -15,9 +15,18 @@ let providerBundleId = (Bundle.main.bundleIdentifier ?? "com.jodtados.softether"
 enum AppModel {
     static var sharedDefaults: UserDefaults { UserDefaults(suiteName: appGroupId) ?? .standard }
     static var store: ServerStore { ServerStore(defaults: sharedDefaults) }
+    /// pinned in Settings wins; empty = the build-time baked secret (QR_B3)
     static var qrSecret: String {
-        sharedDefaults.string(forKey: prefServerSecret) ?? ""
+        let pinned = sharedDefaults.string(forKey: prefServerSecret) ?? ""
+        return pinned.isEmpty ? MgmtSecrets.qrSecret : pinned
     }
+}
+
+/// the ONLY place that formats a server address for display (parity with
+/// Android Masking.kt): the hostname is never printed in the UI, port is not
+/// a secret
+func maskedServerDescription(port: Int) -> String {
+    "•••••••• : \(port)"
 }
 
 @main
@@ -108,7 +117,7 @@ struct ServerListView: View {
                     Text("Нет серверов. Добавьте через QR, ссылку или вручную.")
                         .foregroundColor(.secondary)
                 }
-                ForEach(servers) { server in
+                ForEach(Array(servers.enumerated()), id: \.element.id) { index, server in
                     Button {
                         if !isConnected {
                             AppModel.store.setActiveServer(server.id, isUserInitiated: true)
@@ -121,9 +130,9 @@ struct ServerListView: View {
                                 ? "checkmark.circle.fill" : "circle")
                                 .foregroundColor(server.id == activeId ? .accentColor : .secondary)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(server.label.isEmpty ? server.hostname : server.label)
+                                Text(server.label.isEmpty ? "Сервер \(index + 1)" : server.label)
                                     .foregroundColor(.primary)
-                                Text("\(server.hostname):\(String(server.port)) · \(server.hub)")
+                                Text(maskedServerDescription(port: server.port))
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }
@@ -179,7 +188,7 @@ struct ServerListView: View {
             Menu {
                 Button("Экспорт всех (QR)") { exportAll() }
                 ForEach(servers) { server in
-                    Button("QR: \(server.label.isEmpty ? server.hostname : server.label)") {
+                    Button("QR: \(server.label.isEmpty ? "Сервер без имени" : server.label)") {
                         exportProfile(server)
                     }
                 }
@@ -195,7 +204,7 @@ struct ServerListView: View {
             serverList
             connectButton
         }
-        .navigationTitle("SoftEther")
+        .navigationTitle("Калькулятор")
         .toolbar { toolbarMenu }
         .sheet(isPresented: $showScanner) {
             ScannerView { token in
@@ -512,7 +521,7 @@ struct SettingsView: View {
             } header: {
                 Text("Перенос MVC1")
             } footer: {
-                Text("Тот же Base32-секрет, что в Android-сборке, — токены совместимы в обе стороны.")
+                Text("Тот же Base32-секрет, что в Android-сборке, — токены совместимы в обе стороны. Пусто = используется секрет, запечённый в эту сборку.")
             }
         }
         .navigationTitle("Настройки")
@@ -539,7 +548,8 @@ struct SettingsView: View {
         limitMB = store.trafficLimitMB
         rotationMinutes = store.rotationIntervalMinutes
         failoverLoop = store.failoverLoop
-        qrSecret = AppModel.qrSecret
+        // show only what the user pinned — the baked secret stays implicit
+        qrSecret = AppModel.sharedDefaults.string(forKey: prefServerSecret) ?? ""
         let shared = store.loadServerDefaults()
         defaultsUsername = shared.username
         defaultsPassword = shared.password

@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       user_build:
-        description: 'USER_BUILD — включить UI экспорта QR'
+        description: 'dev-сборка: показать UI экспорта QR (тег-сборки всегда без него)'
         type: boolean
         default: false
   push:
@@ -25,25 +25,27 @@ jobs:
       - name: Generate Xcode project
         run: xcodegen generate
 
-      # XOR-encode the repo secrets (MGMT_URL / MGMT_TOKEN / MGMT_TOTP) into
-      # the generated Info.plist — the same scheme as App/Sources/Mgmt/
-      # MgmtSecrets.swift. Plain values never land in the repo or the binary;
-      # unset secrets leave the defaults empty (mgmt feature dormant) and the
-      # step exits quietly.
+      # XOR-encode the repo secrets (MGMT_URL / MGMT_TOKEN / MGMT_TOTP /
+      # QR_SECRET) into the generated Info.plist — the same scheme as
+      # App/Sources/Mgmt/MgmtSecrets.swift. Plain values never land in the
+      # repo or the binary; unset secrets leave the defaults empty (mgmt
+      # dormant, QR secret asked in Settings) and the step exits quietly.
       - name: Bake management secrets
         shell: bash
         env:
           MGMT_URL: ${{ secrets.MGMT_URL }}
           MGMT_TOKEN: ${{ secrets.MGMT_TOKEN }}
           MGMT_TOTP: ${{ secrets.MGMT_TOTP }}
+          QR_SECRET: ${{ secrets.QR_SECRET }}
         run: |
           python3 - <<'PY'
           import hashlib, os, plistlib
           values = {"MGMT_B0": os.environ.get("MGMT_URL", ""),
                     "MGMT_B1": os.environ.get("MGMT_TOKEN", ""),
-                    "MGMT_B2": os.environ.get("MGMT_TOTP", "")}
+                    "MGMT_B2": os.environ.get("MGMT_TOTP", ""),
+                    "QR_B3": os.environ.get("QR_SECRET", "")}
           if not any(values.values()):
-              print("no mgmt secrets configured — defaults stay empty")
+              print("no secrets configured — defaults stay empty")
               raise SystemExit(0)
           seed = "mvc-6f2c-9d41-b7e8"
           key = hashlib.sha256(seed.encode()).digest()
@@ -56,15 +58,18 @@ jobs:
                   plist[name] = enc(plain)
           with open("App/Info.plist", "wb") as f:
               plistlib.dump(plist, f)
-          print("baked mgmt keys:", sorted(k for k in values if values[k]))
+          print("baked keys:", sorted(k for k in values if values[k]))
           PY
 
       - name: Build (unsigned)
         shell: bash
         run: |
-          FLAGS=""
+          # tag builds ARE the user delivery: hide the QR export menu
+          # (USER_BUILD, same convention as the Android fleet); a manual
+          # dispatch with user_build=true compiles the dev UI with export
+          FLAGS="OTHER_SWIFT_FLAGS=-DUSER_BUILD"
           if [ "${{ inputs.user_build }}" = "true" ]; then
-            FLAGS="OTHER_SWIFT_FLAGS=-DUSER_BUILD"
+            FLAGS=""
           fi
           set +e
           xcodebuild \

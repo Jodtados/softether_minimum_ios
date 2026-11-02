@@ -32,9 +32,9 @@ final class VpnManager {
         let manager = NETunnelProviderManager()
         let proto = NETunnelProviderProtocol()
         proto.providerBundleIdentifier = providerBundleId
-        proto.serverAddress = "SoftEther"
+        proto.serverAddress = "Калькулятор"
         manager.protocolConfiguration = proto
-        manager.localizedDescription = "SoftEther"
+        manager.localizedDescription = "Калькулятор"
         manager.isEnabled = true
         // the user approves the profile once; re-save keeps it active
         try await manager.saveToPreferences()
