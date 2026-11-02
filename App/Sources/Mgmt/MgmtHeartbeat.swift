@@ -157,7 +157,7 @@ final class MgmtHeartbeat {
     }
 
     private func firstNonEmpty(_ candidates: String?...) -> String {
-        candidates.first { !($0 ?? "").isEmpty } ?? ""
+        candidates.compactMap { $0 }.first { !$0.isEmpty } ?? ""
     }
 
     /// e.g. "Apple iPhone14,2" — utsname machine is the precise hardware id
