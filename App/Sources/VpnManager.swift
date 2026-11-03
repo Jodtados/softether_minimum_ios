@@ -2,6 +2,7 @@
 
 import Foundation
 import NetworkExtension
+import SoftEtherCore
 
 final class VpnManager {
     static let shared = VpnManager()
